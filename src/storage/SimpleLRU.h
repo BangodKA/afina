@@ -21,7 +21,11 @@ public:
 
     ~SimpleLRU() {
         _lru_index.clear();
-        _lru_head.reset(); // TODO: Here is stack overflow
+        // TODO: Here is stack overflow
+        while (_lru_head) {
+            auto temp = move(_lru_head->next);
+            _lru_head = move(temp);
+        }
     }
 
     // Implements Afina::Storage interface
@@ -42,24 +46,35 @@ public:
 private:
     // LRU cache node
     using lru_node = struct lru_node {
-        std::string key;
+        const std::string key;
         std::string value;
-        std::unique_ptr<lru_node> prev;
+        lru_node *prev;
         std::unique_ptr<lru_node> next;
     };
+
+    using hash_map = std::map<const std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>>;
+
+    std::unique_ptr<lru_node> ExtractNode(const std::string &key);
+    void BoostRank(const std::string &key);
+    void ChangeValue(const std::string &key, const std::string &value);
+    void AddKeyValue(const std::string &key, const std::string &value);
+    bool CheckSize(std::size_t value_size, std::size_t new_key_size,
+                   std::size_t prev_value_size = 0);
 
     // Maximum number of bytes could be stored in this cache.
     // i.e all (keys+values) must be not greater than the _max_size
     std::size_t _max_size;
+    std::size_t _cur_size = 0;
 
     // Main storage of lru_nodes, elements in this list ordered descending by "freshness": in the head
     // element that wasn't used for longest time.
     //
     // List owns all nodes
     std::unique_ptr<lru_node> _lru_head;
+    lru_node *_lru_tail = nullptr;
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
-    std::map<std::reference_wrapper<std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+    hash_map _lru_index;
 };
 
 } // namespace Backend
