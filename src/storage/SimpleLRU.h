@@ -43,6 +43,7 @@ public:
     // Implements Afina::Storage interface
     bool Get(const std::string &key, std::string &value) override;
 
+
 private:
     // LRU cache node
     using lru_node = struct lru_node {
@@ -52,14 +53,7 @@ private:
         std::unique_ptr<lru_node> next;
     };
 
-    using hash_map = std::map<const std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>>;
-
-    std::unique_ptr<lru_node> ExtractNode(const std::string &key);
-    void BoostRank(const std::string &key);
-    void ChangeValue(const std::string &key, const std::string &value);
-    void AddKeyValue(const std::string &key, const std::string &value);
-    bool CheckSize(std::size_t value_size, std::size_t new_key_size,
-                   std::size_t prev_value_size = 0);
+    using hash_map = std::map<const std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>>;    
 
     // Maximum number of bytes could be stored in this cache.
     // i.e all (keys+values) must be not greater than the _max_size
@@ -75,6 +69,18 @@ private:
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
     hash_map _lru_index;
+
+private:
+    std::unique_ptr<lru_node> ExtractNode(hash_map::const_iterator it);
+    void MoveToHead(hash_map::const_iterator it);
+    void ChangeValue(const std::string &key, const std::string &value);
+    
+    void AddFirstElem(const std::string &key, const std::string &value);
+    void PutNewToHead(const std::string &key, const std::string &value);
+    void InsertNewNode(const std::string &key, const std::string &value);
+    bool IsTooBigForCash(size_t key_size, size_t value_size);
+    void FreeSpace(int delta_space);
+    void UpdateValue(hash_map::const_iterator it, const std::string &value);
 };
 
 } // namespace Backend
