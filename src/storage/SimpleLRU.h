@@ -71,13 +71,15 @@ private:
     hash_map _lru_index;
 
 private:
+    std::unique_ptr<lru_node> ExtractHead(hash_map::const_iterator it);
+    std::unique_ptr<lru_node> ExtractTail(hash_map::const_iterator it);
     std::unique_ptr<lru_node> ExtractNode(hash_map::const_iterator it);
     void MoveToHead(hash_map::const_iterator it);
-    void ChangeValue(const std::string &key, const std::string &value);
     
-    void AddFirstElem(const std::string &key, const std::string &value);
-    void PutNewToHead(const std::string &key, const std::string &value);
-    void InsertNewNode(const std::string &key, const std::string &value);
+    lru_node* AddToHash(const std::string &key, const std::string &value);
+    bool AddToEmptyCash(const std::string &key, const std::string &value);
+    bool AddAnotherElem(const std::string &key, const std::string &value);
+    bool InsertNewNode(const std::string &key, const std::string &value);
     bool IsTooBigForCash(size_t key_size, size_t value_size);
     void FreeSpace(int delta_space);
     void UpdateValue(hash_map::const_iterator it, const std::string &value);

@@ -3,23 +3,31 @@
 namespace Afina {
 namespace Backend {
 
+std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractHead(hash_map::const_iterator it) {
+  std::unique_ptr<lru_node> res = std::move(_lru_head);
+  _lru_head = std::move(res->next);
+  if (_lru_head) {
+    _lru_head->prev = nullptr;
+  }
+  return res;
+}
+
+std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractTail(hash_map::const_iterator it) {
+  std::unique_ptr<lru_node> res(_lru_tail);
+  _lru_tail = _lru_tail->prev;
+  _lru_tail->next.release();
+  _lru_tail->next = nullptr;
+  return res;
+}
+
 std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractNode(hash_map::const_iterator it) {
   lru_node &del_node = it->second.get();
   if (del_node.prev == nullptr) {
-    std::unique_ptr<lru_node> res = std::move(_lru_head);
-    _lru_head = std::move(res->next);
-    if (_lru_head) {
-      _lru_head->prev = nullptr;
-    }
-    return res;
+    return ExtractHead(it);
   }
 
   if (del_node.next == nullptr) {
-    std::unique_ptr<lru_node> res(_lru_tail);
-    _lru_tail = _lru_tail->prev;
-    _lru_tail->next.release();
-    _lru_tail->next = nullptr;
-    return res;
+    return ExtractTail(it);
   }
 
   del_node.next->prev = del_node.prev;
@@ -40,32 +48,52 @@ bool SimpleLRU::IsTooBigForCash(size_t key_size, size_t value_size) {
 
 void SimpleLRU::FreeSpace(int delta_space) {
   while (delta_space + _cur_size > _max_size) {
-    auto del_key = _lru_head->key;
+    const std::string &del_key = _lru_head->key;
     _cur_size -= del_key.size() + _lru_head->value.size();
-    Delete(del_key);
+
+    auto it = _lru_index.find(del_key);
+    auto temp = ExtractHead(it);
+    _lru_index.erase(it);
   }
 }
 
-void SimpleLRU::AddFirstElem(const std::string &key, const std::string &value) {
-  _lru_tail = new lru_node({key, value, nullptr, nullptr});
-  _lru_head.reset(_lru_tail);
-  _lru_index.emplace(_lru_tail->key, *_lru_tail);
+ SimpleLRU::lru_node* SimpleLRU::AddToHash(const std::string &key, const std::string &value)  {
+  lru_node *temp = new lru_node({key, value, _lru_tail, nullptr});
+  auto res = _lru_index.emplace(temp->key, *temp);
+  if (!res.second) {
+    delete temp;
+    return nullptr;
+  }
+  return temp;
 }
 
-void SimpleLRU::PutNewToHead(const std::string &key, const std::string &value) {
-  _lru_tail->next.reset(new lru_node({key, value, _lru_tail, nullptr}));
-  _lru_tail = _lru_tail->next.get();    void AddFirstElem(const std::string &key, const std::string &value);
-
-  _lru_index.emplace(_lru_tail->key, *_lru_tail);
-}
-
-void SimpleLRU::InsertNewNode(const std::string &key, const std::string &value) {
+bool SimpleLRU::AddToEmptyCash(const std::string &key, const std::string &value) {
+  lru_node *temp = AddToHash(key, value);
+  if (!temp) {
+    return false;
+  }
   _cur_size += key.size() + value.size();
+  _lru_tail = temp;
+  _lru_head.reset(_lru_tail);
+  return true;
+}
+
+bool SimpleLRU::AddAnotherElem(const std::string &key, const std::string &value) {
+  lru_node *temp = AddToHash(key, value);
+  if (!temp) {
+    return false;
+  }
+  _cur_size += key.size() + value.size();
+  _lru_tail->next.reset(temp);
+  _lru_tail = _lru_tail->next.get();
+  return true;
+}
+
+bool SimpleLRU::InsertNewNode(const std::string &key, const std::string &value) {
   if (_lru_head == nullptr) {
-    AddFirstElem(key, value);
-    return;
+    return AddToEmptyCash(key, value);
   }  
-  PutNewToHead(key, value);
+  return AddAnotherElem(key, value);
 }
 
 void SimpleLRU::MoveToHead(hash_map::const_iterator it) {
@@ -87,8 +115,7 @@ bool SimpleLRU::Put(const std::string &key, const std::string &value) {
 
   if (it == _lru_index.end()) {
     FreeSpace(key.size() + value.size());
-    InsertNewNode(key, value);
-    return true;
+    return InsertNewNode(key, value);
   }
 
   MoveToHead(it);
@@ -102,8 +129,12 @@ bool SimpleLRU::Put(const std::string &key, const std::string &value) {
 
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
+  if (IsTooBigForCash(key.size(), value.size())) {
+    return false;
+  }
+
   auto it = _lru_index.find(key);
-  if (it != _lru_index.end() || IsTooBigForCash(key.size(), value.size())) {
+  if (it != _lru_index.end()) {
     return false;
   }
 
@@ -114,9 +145,12 @@ bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
 
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::Set(const std::string &key, const std::string &value) {
+  if (IsTooBigForCash(key.size(), value.size())) {  // it->second.get().value.size()
+    return false;
+  }
+
   auto it = _lru_index.find(key);
-  if (it == _lru_index.end() ||
-      IsTooBigForCash(0, value.size() - it->second.get().value.size())) {
+  if (it == _lru_index.end()) {
     return false;
   }
   
@@ -133,7 +167,7 @@ bool SimpleLRU::Delete(const std::string &key) {
   }
 
   auto temp = ExtractNode(it);
-  _lru_index.erase(key);
+  _lru_index.erase(it);
   return true;
 }
 
