@@ -244,9 +244,11 @@ void ServerImpl::OnRun() {
 
     // Cleanup on exit...
     _logger->warn("Network stopped");
-    std::unique_lock<std::mutex> lock(m);
-    if (!clients.empty() && !running) {
-        wait_all_to_stop.wait(lock);
+    {
+        std::unique_lock<std::mutex> lock(m);
+        if (!clients.empty() && !running) {
+            wait_all_to_stop.wait(lock);
+        }
     }
 }
 
