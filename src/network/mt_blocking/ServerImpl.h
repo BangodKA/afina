@@ -4,6 +4,9 @@
 #include <atomic>
 #include <thread>
 
+#include <unordered_set>
+#include <condition_variable>
+
 #include <afina/network/Server.h>
 
 namespace spdlog {
@@ -38,7 +41,10 @@ protected:
      */
     void OnRun();
 
+    void ProcessClient(int client_socket);
+
 private:
+    #define MAX_CONNECTIONS_AMOUNT 2
     // Logger instance
     std::shared_ptr<spdlog::logger> _logger;
 
@@ -52,6 +58,11 @@ private:
 
     // Thread to run network on
     std::thread _thread;
+
+
+    std::mutex m;
+    std::unordered_set<int> clients;
+    std::condition_variable wait_all_to_stop;
 };
 
 } // namespace MTblocking
