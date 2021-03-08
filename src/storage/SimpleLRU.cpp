@@ -3,7 +3,7 @@
 namespace Afina {
 namespace Backend {
 
-std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractHead(hash_map::const_iterator it) {
+std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractHead() {
   std::unique_ptr<lru_node> res = std::move(_lru_head);
   _lru_head = std::move(res->next);
   if (_lru_head) {
@@ -12,7 +12,7 @@ std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractHead(hash_map::const_iter
   return res;
 }
 
-std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractTail(hash_map::const_iterator it) {
+std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractTail() {
   std::unique_ptr<lru_node> res(_lru_tail);
   _lru_tail = _lru_tail->prev;
   _lru_tail->next.release();
@@ -23,11 +23,11 @@ std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractTail(hash_map::const_iter
 std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractNode(hash_map::const_iterator it) {
   lru_node &del_node = it->second.get();
   if (del_node.prev == nullptr) {
-    return ExtractHead(it);
+    return ExtractHead();
   }
 
   if (del_node.next == nullptr) {
-    return ExtractTail(it);
+    return ExtractTail();
   }
 
   del_node.next->prev = del_node.prev;
@@ -38,11 +38,11 @@ std::unique_ptr<SimpleLRU::lru_node> SimpleLRU::ExtractNode(hash_map::const_iter
 
 
 void SimpleLRU::UpdateValue(hash_map::const_iterator it, const std::string &value) {
-  _cur_size += value.size() - _lru_tail->value.size();
-  _lru_tail->value = value;
+  _cur_size += value.size() - it->second.get().value.size();
+  it->second.get().value = value;
 }
 
-bool SimpleLRU::IsTooBigForCash(size_t key_size, size_t value_size) {
+bool SimpleLRU::IsTooBigForCache(size_t key_size, size_t value_size) {
  return key_size + value_size > _max_size;
 }
 
@@ -52,7 +52,7 @@ void SimpleLRU::FreeSpace(int delta_space) {
     _cur_size -= del_key.size() + _lru_head->value.size();
 
     auto it = _lru_index.find(del_key);
-    auto temp = ExtractHead(it);
+    auto temp = ExtractHead();
     _lru_index.erase(it);
   }
 }
@@ -67,7 +67,7 @@ void SimpleLRU::FreeSpace(int delta_space) {
   return temp;
 }
 
-bool SimpleLRU::AddToEmptyCash(const std::string &key, const std::string &value) {
+bool SimpleLRU::AddToEmptyCache(const std::string &key, const std::string &value) {
   lru_node *temp = AddToHash(key, value);
   if (!temp) {
     return false;
@@ -91,7 +91,7 @@ bool SimpleLRU::AddAnotherElem(const std::string &key, const std::string &value)
 
 bool SimpleLRU::InsertNewNode(const std::string &key, const std::string &value) {
   if (_lru_head == nullptr) {
-    return AddToEmptyCash(key, value);
+    return AddToEmptyCache(key, value);
   }  
   return AddAnotherElem(key, value);
 }
@@ -107,7 +107,7 @@ void SimpleLRU::MoveToHead(hash_map::const_iterator it) {
 
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::Put(const std::string &key, const std::string &value) {
-  if (IsTooBigForCash(key.size(), value.size())) {
+  if (IsTooBigForCache(key.size(), value.size())) {
     return false;
   }
 
@@ -129,7 +129,7 @@ bool SimpleLRU::Put(const std::string &key, const std::string &value) {
 
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
-  if (IsTooBigForCash(key.size(), value.size())) {
+  if (IsTooBigForCache(key.size(), value.size())) {
     return false;
   }
 
@@ -145,7 +145,7 @@ bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
 
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::Set(const std::string &key, const std::string &value) {
-  if (IsTooBigForCash(key.size(), value.size())) {  // it->second.get().value.size()
+  if (IsTooBigForCache(key.size(), value.size())) {  // it->second.get().value.size()
     return false;
   }
 
