@@ -23,7 +23,7 @@ namespace MTblocking {
  */
 class ServerImpl : public Server {
 public:
-    ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl);
+    ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl, int max_connections_amount = 2);
     ~ServerImpl();
 
     // See Server.h
@@ -44,7 +44,7 @@ protected:
     void ProcessClient(int client_socket);
 
 private:
-    #define MAX_CONNECTIONS_AMOUNT 2
+    int _max_connections_amount;
     // Logger instance
     std::shared_ptr<spdlog::logger> _logger;
 
