@@ -83,7 +83,12 @@ void ServerImpl::Stop() {
         running.store(false);
 
         for (auto client_socket : clients) {
-            shutdown(client_socket, SHUT_RD);
+            shutdown(client_socket, SHUT_RD); // closing only read,
+                                              // cause it does not depend on server,
+                                              // but on client, who can write endlessly,
+                                              // or stop writing in the middle of a command,
+                                              // so we have to sleep and wait
+                                              // write depends on us, so we will finish sooner or later
         }
     }
     shutdown(_server_socket, SHUT_RDWR);
@@ -246,7 +251,7 @@ void ServerImpl::OnRun() {
     _logger->warn("Network stopped");
     {
         std::unique_lock<std::mutex> lock(m);
-        if (!clients.empty() && !running) {
+        while (!clients.empty() && !running) {
             wait_all_to_stop.wait(lock);
         }
     }
