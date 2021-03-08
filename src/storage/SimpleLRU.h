@@ -21,7 +21,11 @@ public:
 
     ~SimpleLRU() {
         _lru_index.clear();
-        _lru_head.reset(); // TODO: Here is stack overflow
+        // TODO: Here is stack overflow
+        while (_lru_head) {
+            auto temp = move(_lru_head->next);
+            _lru_head = move(temp);
+        }
     }
 
     // Implements Afina::Storage interface
@@ -39,27 +43,46 @@ public:
     // Implements Afina::Storage interface
     bool Get(const std::string &key, std::string &value) override;
 
+
 private:
     // LRU cache node
     using lru_node = struct lru_node {
-        std::string key;
+        const std::string key;
         std::string value;
-        std::unique_ptr<lru_node> prev;
+        lru_node *prev;
         std::unique_ptr<lru_node> next;
     };
+
+    using hash_map = std::map<const std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>>;    
 
     // Maximum number of bytes could be stored in this cache.
     // i.e all (keys+values) must be not greater than the _max_size
     std::size_t _max_size;
+    std::size_t _cur_size = 0;
 
     // Main storage of lru_nodes, elements in this list ordered descending by "freshness": in the head
     // element that wasn't used for longest time.
     //
     // List owns all nodes
     std::unique_ptr<lru_node> _lru_head;
+    lru_node *_lru_tail = nullptr;
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
-    std::map<std::reference_wrapper<std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+    hash_map _lru_index;
+
+private:
+    std::unique_ptr<lru_node> ExtractHead();
+    std::unique_ptr<lru_node> ExtractTail();
+    std::unique_ptr<lru_node> ExtractNode(hash_map::const_iterator it);
+    void MoveToHead(hash_map::const_iterator it);
+    
+    lru_node* AddToHash(const std::string &key, const std::string &value);
+    bool AddToEmptyCache(const std::string &key, const std::string &value);
+    bool AddAnotherElem(const std::string &key, const std::string &value);
+    bool InsertNewNode(const std::string &key, const std::string &value);
+    bool IsTooBigForCache(size_t key_size, size_t value_size);
+    void FreeSpace(int delta_space);
+    void UpdateValue(hash_map::const_iterator it, const std::string &value);
 };
 
 } // namespace Backend
