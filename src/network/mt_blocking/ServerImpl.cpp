@@ -28,7 +28,8 @@ namespace Network {
 namespace MTblocking {
 
 // See Server.h
-ServerImpl::ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl) : Server(ps, pl) {}
+ServerImpl::ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl,
+                       int max_connections_amount) : Server(ps, pl), _max_connections_amount(max_connections_amount) {}
 
 // See Server.h
 ServerImpl::~ServerImpl() {}
@@ -238,7 +239,7 @@ void ServerImpl::OnRun() {
         // TODO: Start new thread and process data from/to connection
         {
             std::lock_guard<std::mutex> guard(m);
-            if (clients.size() == MAX_CONNECTIONS_AMOUNT) {
+            if (clients.size() == _max_connections_amount) {
                 close(client_socket);
                 continue;
             }
