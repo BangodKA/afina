@@ -28,7 +28,8 @@ namespace Network {
 namespace MTblocking {
 
 // See Server.h
-ServerImpl::ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl) : Server(ps, pl) {}
+ServerImpl::ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl,
+                       int max_connections_amount) : Server(ps, pl), _max_connections_amount(max_connections_amount) {}
 
 // See Server.h
 ServerImpl::~ServerImpl() {}
@@ -83,7 +84,12 @@ void ServerImpl::Stop() {
         running.store(false);
 
         for (auto client_socket : clients) {
-            shutdown(client_socket, SHUT_RD);
+            shutdown(client_socket, SHUT_RD); // closing only read,
+                                              // cause it does not depend on server,
+                                              // but on client, who can write endlessly,
+                                              // or stop writing in the middle of a command,
+                                              // so we have to sleep and wait
+                                              // write depends on us, so we will finish sooner or later
         }
     }
     shutdown(_server_socket, SHUT_RDWR);
@@ -233,7 +239,7 @@ void ServerImpl::OnRun() {
         // TODO: Start new thread and process data from/to connection
         {
             std::lock_guard<std::mutex> guard(m);
-            if (clients.size() == MAX_CONNECTIONS_AMOUNT) {
+            if (clients.size() == _max_connections_amount) {
                 close(client_socket);
                 continue;
             }
@@ -246,7 +252,7 @@ void ServerImpl::OnRun() {
     _logger->warn("Network stopped");
     {
         std::unique_lock<std::mutex> lock(m);
-        if (!clients.empty() && !running) {
+        while (!clients.empty() && !running) {
             wait_all_to_stop.wait(lock);
         }
     }
