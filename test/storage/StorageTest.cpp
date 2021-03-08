@@ -11,6 +11,7 @@
 #include <afina/execute/Set.h>
 
 #include "storage/SimpleLRU.h"
+#include "storage/StripedLRU.h"
 
 using namespace Afina::Backend;
 using namespace Afina::Execute;
@@ -194,4 +195,125 @@ TEST(StorageTest, MaxTest) {
         std::string res;
         EXPECT_FALSE(storage.Get(key, res));
     }
+}
+
+
+TEST(StripedStorageTest, PutGet) {
+    StripedLRU storage = Afina::Backend::StripedLRU::CreateCache();
+
+    EXPECT_TRUE(storage.Put("KEY1", "val1"));
+    EXPECT_TRUE(storage.Put("KEY2", "val2"));
+
+    std::string value;
+    EXPECT_TRUE(storage.Get("KEY1", value));
+    EXPECT_TRUE(value == "val1");
+
+    EXPECT_TRUE(storage.Get("KEY2", value));
+    EXPECT_TRUE(value == "val2");
+}
+
+TEST(StripedStorageTest, PutOverwrite) {
+    StripedLRU storage = Afina::Backend::StripedLRU::CreateCache();
+
+    EXPECT_TRUE(storage.Put("KEY1", "val1"));
+    EXPECT_TRUE(storage.Put("KEY1", "val2"));
+
+    std::string value;
+    EXPECT_TRUE(storage.Get("KEY1", value));
+    EXPECT_TRUE(value == "val2");
+}
+
+TEST(StripedStorageTest, PutIfAbsent) {
+    StripedLRU storage = Afina::Backend::StripedLRU::CreateCache();
+
+    EXPECT_TRUE(storage.PutIfAbsent("KEY1", "val1"));
+
+    EXPECT_FALSE(storage.PutIfAbsent("KEY1", "val2"));
+
+    std::string value;
+    EXPECT_TRUE(storage.Get("KEY1", value));
+    EXPECT_TRUE(value == "val1");
+}
+
+TEST(StripedStorageTest, PutSetGet) {
+    StripedLRU storage = Afina::Backend::StripedLRU::CreateCache();
+
+    EXPECT_TRUE(storage.Put("KEY1", "val1"));
+    EXPECT_TRUE(storage.Set("KEY1", "val2"));
+
+    EXPECT_FALSE(storage.Set("KEY2", "val2"));
+
+    std::string value;
+    EXPECT_TRUE(storage.Get("KEY1", value));
+    EXPECT_TRUE(value == "val2");
+}
+
+TEST(StripedStorageTest, SetIfAbsent) {
+    StripedLRU storage = Afina::Backend::StripedLRU::CreateCache();
+
+    EXPECT_TRUE(storage.Put("KEY1", "val1"));
+
+    std::string value;
+    EXPECT_FALSE(storage.Set("KEY2", "val2"));
+    EXPECT_TRUE(storage.Get("KEY1", value));
+    EXPECT_TRUE(value == "val1");
+}
+
+TEST(StripedStorageTest, PutDeleteGet) {
+    StripedLRU storage = Afina::Backend::StripedLRU::CreateCache();
+
+    EXPECT_TRUE(storage.Put("KEY1", "val1"));
+    EXPECT_TRUE(storage.Put("KEY2", "val2"));
+
+    EXPECT_TRUE(storage.Delete("KEY1"));
+
+    std::string value;
+    EXPECT_FALSE(storage.Get("KEY1", value));
+    EXPECT_TRUE(storage.Get("KEY2", value));
+    EXPECT_TRUE(value == "val2");
+}
+
+
+TEST(StripedStorageTest, GetIfAbsent)
+{
+    StripedLRU storage = Afina::Backend::StripedLRU::CreateCache();
+
+
+    std::string value;
+    EXPECT_FALSE(storage.Get("KEY1", value));
+
+    EXPECT_FALSE(storage.Get("KEY2", value));
+
+    EXPECT_FALSE(storage.Get("KEY3", value));
+}
+
+TEST(StripedStorageTest, DeleteIfAbsent)
+{
+    StripedLRU storage = Afina::Backend::StripedLRU::CreateCache();
+    EXPECT_FALSE(storage.Delete("KEY1"));
+
+    EXPECT_FALSE(storage.Delete("KEY2"));
+
+    EXPECT_FALSE(storage.Delete("KEY3"));
+}
+
+TEST(StripedStorageTest, DeleteHeadAndTailNode)
+{
+    StripedLRU storage = Afina::Backend::StripedLRU::CreateCache();
+
+    EXPECT_TRUE(storage.Put("KEY1", "val1"));
+    EXPECT_TRUE(storage.Put("KEY2", "val2"));
+    EXPECT_TRUE(storage.Put("KEY3", "val3"));
+    EXPECT_TRUE(storage.Put("KEY4", "val4"));
+
+
+    EXPECT_TRUE(storage.Set("KEY2", "val22"));
+    EXPECT_TRUE(storage.Set("KEY3", "val23"));
+    EXPECT_TRUE(storage.Set("KEY1", "val21"));
+    EXPECT_TRUE(storage.Set("KEY1", "val31"));
+    EXPECT_TRUE(storage.Set("KEY1", "val41"));
+    // After that, KEY1 should be first in the rating.
+    // And KEY4 should be the last.
+    EXPECT_TRUE(storage.Delete("KEY4"));
+    EXPECT_TRUE(storage.Delete("KEY1"));
 }
